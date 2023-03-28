@@ -20,35 +20,69 @@ library(textclean)
 library(stringi)
 library(igraph)
 library(ggraph)
+library(tesseract)
 
 # this might cause some problems for some that have not installed the previous
 library(spacyr)
+library(pdftools)
+
 
 #===========================================================================
 
+# a very similar function to pdftools::pdf_ocr_data but it has an option in tesseract that reads pdfs with cols
+pdf2text <- function(path, language = "eng", pages = NULL) {
+  # set google's tesseract function by specified language
+  engine <- tesseract(language = language, options = list(tessedit_pageseg_mode = 1))
+  images <- pdftools::pdf_convert(path, format = "png", dpi = 600, pages = pages)
+  # just return as text. 
+  tesseract::ocr(images, engine = engine)
+}
+
+
 # a function that a) takes a pdf and reads the pages, and then b) transforms into uncleaned text. and outputs it as a data frame. 
 
-read_pdf <- function(path, page_nr = FALSE) {
+read_pdf <- function(path, page_nr = FALSE, language = "eng") {
   # list files in path that have a .pdf extension and get unique doc names
-  
+
   files <-
     list.files(path,
                full.names = TRUE,
                pattern = ".pdf$",
                recursive = TRUE)
   
-  #creating doc names
+  # creating doc names
   doc_names <- str_split(files, "/") %>% 
-    map(.x =., ~.x[length(.x)]) %>% unlist()
+    map_chr(~last(.))
+  
   
   # if page number is true, then give a data frame per doc and page
   if (page_nr) {
+    
     out <- map2_df(.x = files, .y = doc_names, ~ {
-      # extract the text by page number and list()
-      text <-
-        extract_text(.x, pages = seq_along(1:length(pdf_text(.x))))
+      # if readable, then use the extract_text function from the tabulizer package
+      
+      # readable or not based ona a test if the text contains more than 15 characters
+      # using the stringi package because of speed advantage tested by rbenchmark
+      readab <- nchar(stri_c(pdftools::pdf_text(.x), collapse = "")) > 15
+        
+      if (readab) {
+        # extract the text by page number
+        text <-
+          extract_text(.x, pages = seq_along(1:pdftools::pdf_info(.x)$pages))
+      } else {
+        # use pdf2text function here. Be careful, because here, confidence values are not taken into account.
+        # these could be found by placing lapply(images, tesseract::ocr_data, engine = engine) into the function.
+        text <-
+          pdf2text(.x,
+                   language = language,
+                   pages = pdftools::pdf_info(.x)$pages)
+      }
+    
       # put each doc in a row and list the text()
-      tibble(name = .y, text = text %>% list()) %>%
+      tibble(name = .y, 
+             text = text %>% list(), 
+             pages = pdftools::pdf_info(.x)$pages, 
+             year = pdftools::pdf_info(.x)$created) %>%
         # unnest text so doc will be reoccuring
         unnest(cols = text) %>%
         # create page number
@@ -56,21 +90,46 @@ read_pdf <- function(path, page_nr = FALSE) {
                #get rid of weid n's
                text = str_replace_all(text, "\\n", " "), 
                # remove line breaks
-               text = str_remove_all(text, "- ")) %>%
-        select(name, page, text)
+               text = str_remove_all(text, "- ")) 
+      
     })
+    
     # if not, then just give a data frame per doc
   } else {
+    
     out <- map2_df(.x = files, .y = doc_names, ~ {
-      # extract the text by page number and list()
-      text <-
-        extract_text(.x, pages = seq_along(1:length(pdf_text(.x))))
-      tibble(name = .y, text = paste(text, collapse = " ")) %>% 
-        mutate(#get rid of weid n's
-          text = str_replace_all(text, "\\n", " "), 
-          # remove line breaks
-          text = str_remove_all(text, "- "))
+      # if readable, then use the extract_text function from the tabulizer package
+      
+      # readable or not based ona a test if the text contains more than 15 characters
+      # using the stringi package because of speed advantage tested by rbenchmark
+      readab <- nchar(stri_c(pdftools::pdf_text(.x), collapse = "")) > 15
+      
+      if (readab) {
+        # extract the text by page number
+        text <-
+          extract_text(.x, pages = seq_along(1:pdftools::pdf_info(.x)$pages))
+      } else {
+        # use pdf2text function here. Be careful, because here, confidence values are not taken into account.
+        # these could be found by placing lapply(images, tesseract::ocr_data, engine = engine) into the function.
+        text <-
+          pdf2text(.x,
+                   language = language,
+                   pages = pdftools::pdf_info(.x)$pages)
+      }
+      
+      # put each doc in a row and list the text()
+      tibble(name = .y, 
+             text = paste(text, collapse = " "), 
+             pages = pdftools::pdf_info(.x)$pages, 
+             year = pdftools::pdf_info(.x)$created) %>%
+        mutate(
+               #get rid of weid n's
+               text = str_replace_all(text, "\\n", " "), 
+               # remove line breaks
+               text = str_remove_all(text, "- ")) 
+  
     })
+    
   }
   
   # remove non-UTF8 characters

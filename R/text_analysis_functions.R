@@ -50,9 +50,8 @@ read_pdf <- function(path, page_nr = FALSE, language = "eng") {
                pattern = ".pdf$",
                recursive = TRUE)
   
-  # creating doc names
-  doc_names <- str_split(files, "/") %>% 
-    map_chr(~last(.))
+  # creating doc names with basename function
+  doc_names <- basename(files) %>% str_remove(".pdf$")
   
   
   # if page number is true, then give a data frame per doc and page

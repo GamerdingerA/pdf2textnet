@@ -326,7 +326,7 @@ spacy_parse_advance <-
       
       # only selecting lines for dictionary
       text <- d1 %>%
-        left_join(raw_text,
+        left_join(text,
                   by = c("doc_id", "sentence_id"),
                   multiple = "all")
       
@@ -394,7 +394,7 @@ spacy_parse_advance <-
              
            })
     
-    return(list(text_ready = text_ready, text = as_tibble(text)))
+    return(list(text_ready = text_ready, raw_text = as_tibble(text)))
     
   }
 

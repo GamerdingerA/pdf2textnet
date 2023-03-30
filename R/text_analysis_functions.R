@@ -259,41 +259,76 @@ clean_string <- function(input_string, remove_stopwords = TRUE, remove_numerics 
 
 
 #===========================================================================
-
+#' spacy_parse_advance
+#'
+#' Parses text using the spacyr package and returns a list containing the raw output
+#' and a cleaned version of the parsed text.
+#'
+#' @param df A data frame containing the text to be parsed.
+#' @param txt_col The name of the column in df that contains the text to be parsed.
+#' @param dictionary Whether to use a dictionary to filter the parsed text. If TRUE,
+#' a dictionary list must be provided in the dict_list parameter.
+#' @param dict_list A character vector containing the words to filter by if dictionary is TRUE.
+#' @param pos A character vector indicating which parts of speech to include in the cleaned version
+#' of the parsed text. Possible values are "nouns", "nounphrase", and "all".
+#' @param model The spacyr model to use for parsing. Default is "en_core_web_sm".
+#'
+#' @return A list containing two data frames: text_ready (the cleaned version of the parsed text)
+#' and raw_text (the raw output from spacy_parse).
+#'
+#' @examples
+#' data("crude")
+#' spacy_parse_advance(crude, txt_col = "text", pos = "nouns", dictionary = TRUE,
+#'                     dict_list = c("oil", "barrel"), model = "en_core_web_lg")
+#'
+#' @import spacyr
+#' @import dplyr
+#' @import magrittr
+#' @importFrom tidyr unnest
+#' @importFrom textclean clean_string
+#'
+#' @export
+#' 
 spacy_parse_advance <-
   function(df,
            txt_col = "text",
            dictionary = FALSE,
            dict_list = NULL,
-           pos = c("nouns", "nounphrase", "all")) {
+           pos = c("nouns", "nounphrase", "all"), 
+           model = "en_core_web_sm") {
+    
+    # check if spacyr is loaded and install it if necessary
+    if (!requireNamespace("spacyr", quietly = TRUE)) {
+      stop("Please install the spacyr package before running this function. You can use install.packages('spacyr') to install it. Please use spacy_install() to run the model in the R environment")
+    }
+    
+    # start spacyr session with specified model
+    spacy_initialize(model = model)
+  
     # validate input parameters
     stopifnot(is.data.frame(df))
     stopifnot(txt_col %in% colnames(df))
     stopifnot(pos %in% c("nouns", "nounphrase", "all"))
     
+    # parsing everything through spacy
+    raw_text <- spacy_parse(df[[txt_col]], dependency = TRUE, nounphrase = TRUE)
     
-    if (!dictionary) {
-      # parsing everything through spacy
-      text <- spacy_parse(df[[txt_col]], dependency = TRUE, nounphrase = TRUE)
-      
-    } else {
-      
-      if (is.null(dict_list)) {
-        stop("Please provide a dictionary list if dictionary option is selected.")
-      }
-      
-      d1 <- spacy_parse(df[[txt_col]], dependency = TRUE, nounphrase = TRUE)
+    # making a duplicate to use it in switch statements
+    text <- raw_text
+    
+    if (dictionary) {
+      stopifnot(!is.null(dict_list))
       
       #using dictionary
-      d2 <- d1 %>%
+      d1 <- raw_text %>%
         #collapse dictionary and filter in d1
         filter(grepl(paste0(dict_list, collapse = "|"), lemma, ignore.case = TRUE)) %>%
         select(doc_id, sentence_id) %>%
         distinct(doc_id, sentence_id)
       
       # only selecting lines for dictionary
-      text <- d2 %>%
-        left_join(d1,
+      text <- d1 %>%
+        left_join(raw_text,
                   by = c("doc_id", "sentence_id"),
                   multiple = "all")
       
@@ -356,11 +391,11 @@ spacy_parse_advance <-
              
            })
     
-    return(text_ready)
+    return(list(text_ready = text_ready, raw_text = raw_text))
     
   }
 
- 
+
 #===========================================================================
 
 make_network <-

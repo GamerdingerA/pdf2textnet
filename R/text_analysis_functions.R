@@ -309,22 +309,20 @@ spacy_parse_advance <-
     stopifnot(is.data.frame(df))
     stopifnot(txt_col %in% colnames(df))
     stopifnot(pos %in% c("nouns", "nounphrase", "all"))
-    
-    # parsing everything through spacy
-    raw_text <- spacy_parse(df[[txt_col]], dependency = TRUE, nounphrase = TRUE)
-    
-    # making a duplicate to use it in switch statements
-    text <- raw_text
-    
+  
     if (dictionary) {
+      
       stopifnot(!is.null(dict_list))
       
+      # parsing everything through spacy
+      text <- spacy_parse(df[[txt_col]], dependency = TRUE, nounphrase = TRUE)
+      
       #using dictionary
-      d1 <- raw_text %>%
+      d1 <- text %>%
         #collapse dictionary and filter in d1
         filter(grepl(paste0(dict_list, collapse = "|"), lemma, ignore.case = TRUE)) %>%
         select(doc_id, sentence_id) %>%
-        distinct(doc_id, sentence_id)
+        distinct(doc_id, sentence_id) 
       
       # only selecting lines for dictionary
       text <- d1 %>%
@@ -332,6 +330,11 @@ spacy_parse_advance <-
                   by = c("doc_id", "sentence_id"),
                   multiple = "all")
       
+    } else {
+      
+      # parsing everything through spacy
+      text <- spacy_parse(df[[txt_col]], dependency = TRUE, nounphrase = TRUE)
+    
     }
     
     switch(pos,
@@ -391,7 +394,7 @@ spacy_parse_advance <-
              
            })
     
-    return(list(text_ready = text_ready, raw_text = raw_text))
+    return(list(text_ready = text_ready, raw_text = text))
     
   }
 

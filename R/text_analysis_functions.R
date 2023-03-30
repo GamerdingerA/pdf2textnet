@@ -394,7 +394,7 @@ spacy_parse_advance <-
              
            })
     
-    return(list(text_ready = text_ready, raw_text = text))
+    return(list(text_ready = text_ready, text = as_tibble(text)))
     
   }
 
